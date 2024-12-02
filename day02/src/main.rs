@@ -38,8 +38,22 @@ impl Report {
         true
     }
 
+    fn is_safe_with_dampener(&self) -> bool {
+        for k in 0..(self.levels.len()) {
+            let mut levels = self.levels.clone();
+            levels.remove(k);
+            let r = Report { levels };
+
+            if r.all_increasing() || r.all_decreasing() {
+                return true
+            }
+        }
+
+        false
+    }
+
     fn is_safe(&self) -> bool {
-        self.all_increasing() || self.all_decreasing()
+        self.all_increasing() || self.all_decreasing() || self.is_safe_with_dampener()
     }
 }
 
