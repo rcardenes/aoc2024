@@ -113,20 +113,16 @@ fn main() {
 
     let mut extractor = Extractor::new(false);
 
-    let mul_groups = input.iter()
-                        .map(|l| extractor.extract_mults(&l))
-                        .collect::<Vec<_>>();
-    let mul_sums = mul_groups.iter()
-                             .map(|muls| muls.iter().map(|m| m.result()).sum::<usize>())
-                             .sum::<usize>();
+    let mul_sums = input.iter()
+                            .map(|l| extractor.extract_mults(&l))
+                            .map(|muls| muls.iter().map(|m| m.result()).sum::<usize>())
+                            .sum::<usize>();
     println!("Multiplications added: {mul_sums:?}");
 
     let mut extractor = Extractor::new(true);
-    let mul_groups = input.iter()
-                        .map(|l| extractor.extract_mults(&l))
-                        .collect::<Vec<_>>();
-    let mul_sums = mul_groups.iter()
-                             .map(|muls| muls.iter().map(|m| m.result()).sum::<usize>())
-                             .sum::<usize>();
+    let mul_sums = input.iter()
+                            .map(|l| extractor.extract_mults(&l))
+                            .map(|muls| muls.iter().map(|m| m.result()).sum::<usize>())
+                            .sum::<usize>();
     println!("Enabled multiplications added: {mul_sums:?}");
 }
