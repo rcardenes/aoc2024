@@ -12,3 +12,5 @@ This is part of the Telegram "AoC Canarias" channel discussion. Repos from other
 * [CristoJV](https://github.com/CristoJV/aoc)
 * [Lucas Hernández Abreu](https://github.com/lucashdez/AdventOfCode)
 * [Tania Vargas](https://github.com/Tania-Vargas/AoC24)
+* [Diego Díaz Morón](https://github.com/Diegodmbot)
+* [Jesús Lugo](https://github.com/JesusLugo2002/AdventOfCode)
