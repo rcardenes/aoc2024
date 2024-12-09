@@ -49,7 +49,8 @@ impl Span {
         self.content.push(file);
     }
 
-    fn inc(&mut self, id: usize) {
+    // Returns true if the span becomes full
+    fn inc(&mut self, id: usize) -> bool {
         assert!(!self.is_full());
 
         match self.content.last_mut() {
@@ -59,6 +60,8 @@ impl Span {
             },
             _ => self.append(File { id, blocks: 1 })
         }
+
+        self.is_full()
     }
 
     // Returns true if the span becomes empty
@@ -71,7 +74,7 @@ impl Span {
             self.content.pop();
         }
 
-        self.content.is_empty()
+        self.is_empty()
     }
 
     fn is_empty(&self) -> bool {
@@ -116,70 +119,72 @@ impl Display for Span {
 #[derive(Debug)]
 struct FileSystem {
     structure: Vec<Span>,
-    freespace_list: Vec<usize>,
-    with_file_list: Vec<usize>,
+    data_pointer: usize,
 }
 
 impl FileSystem {
     fn new(structure: Vec<Span>) -> Self {
-        let (with_file_list, freespace_list): (Vec<(usize, usize)>, Vec<(usize, usize)>) = structure
-            .iter()
-            .enumerate()
-            .map(|(index, s)| (index, s.freespace))
-            .partition(|(_, fs)| *fs == 0);
-        let with_file_list = with_file_list.into_iter().map(|(i, _)| i).collect();
-        let freespace_list = freespace_list.into_iter().map(|(i, _)| i).collect();
+        let last_span_is_free = structure.last().is_some_and(|s| s.is_empty());
+        // The last span with data will be either the very last of the structure or the previous
+        // one, if the last is empty
+        let data_pointer = structure.len() - if last_span_is_free { 2 } else { 1 };
 
         FileSystem {
             structure,
-            freespace_list,
-            with_file_list,
+            data_pointer,
         }
     }
 
     fn compact(&self) -> FileSystem {
-        let mut freespace_list = self.freespace_list.clone();
-        let mut with_file_list = self.with_file_list.clone();
         let mut structure = self.structure.clone();
 
-        loop {
-            let last_index= *with_file_list.last().expect("With_file_list is empty!");
-            let first_free = *freespace_list.first().expect("Empty free space list!");
+        // By definition the first empty spot will be at the second span
+        let mut freespace_pointer = 1usize;
+        let mut data_pointer = self.data_pointer;
 
-            if first_free > last_index {
-                break;
+        while freespace_pointer < data_pointer {
+            let (inc_free_span, dec_data_span) = {
+                let (before_last_span, from_last_span) = structure.split_at_mut(data_pointer);
+                let data_span = &mut from_last_span[0];
+                let free_span = &mut before_last_span[freespace_pointer];
+                let file = data_span.last_mut().unwrap();
+                (free_span.inc(file.id), data_span.dec())
+            };
+
+            if inc_free_span {
+                // The span just became full
+                loop {
+                    freespace_pointer += 1;
+                    if !structure[freespace_pointer].is_full() {
+                        break;
+                    }
+                }
             }
 
-            let (before_last_span, from_last_span) = structure.split_at_mut(last_index);
-            let last_span = &mut from_last_span[0];
-            let free_span = &mut before_last_span[first_free];
-
-            let file = last_span.last().unwrap();
-            free_span.inc(file.id);
-            last_span.dec();
-
-            if free_span.is_full() {
-                freespace_list.remove(0);
-            }
-            if last_span.is_empty() {
-                with_file_list.pop();
+            if dec_data_span {
+                // If the last span with data just became empty
+                loop {
+                    data_pointer -= 1;
+                    if !structure[data_pointer].is_empty() {
+                        break;
+                    }
+                }
             }
         }
 
         FileSystem {
             structure,
-            with_file_list,
-            freespace_list,
+            data_pointer,
         }
     }
 
     fn checksum(&self) -> usize {
-        let last_with_content = *self.with_file_list.last().unwrap();
         let mut curr_block = 0usize;
         let mut ret = 0usize;
 
+        // TODO: Rewrite as a fold with take_while
         for (i, span) in self.structure.iter().enumerate() {
-            if i > last_with_content {
+            if i > self.data_pointer {
                 break;
             }
 
@@ -259,7 +264,6 @@ fn read_input<R>(mut stream: BufReader<R>) -> FileSystem
 
 fn main() {
     let filesys = read_input(BufReader::new(stdin()));
-    // eprintln!("{filesys}");
     let compact_fs = filesys.compact();
     // eprintln!("{compact_fs}");
     println!("Checksum for compacted: {}", compact_fs.checksum());
