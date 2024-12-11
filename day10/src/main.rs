@@ -1,9 +1,20 @@
 use std::{collections::HashMap, io::{stdin, BufRead, BufReader, Read}};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct Point {
     x: i32,
     y: i32,
+}
+
+impl Point {
+    fn adjacent(&self) -> Vec<Point> {
+        vec![
+            Point { x: self.x - 1, y: self.y },
+            Point { x: self.x + 1, y: self.y },
+            Point { x: self.x, y: self.y - 1 },
+            Point { x: self.x, y: self.y + 1 },
+        ]
+    }
 }
 
 struct ScoredPoint {
@@ -20,6 +31,55 @@ impl ScoredPoint {
     }
 }
 
+struct TrailStep<'a> {
+    coords: Point,
+    prev: Option<&'a TrailStep<'a>>
+}
+
+impl<'a> TrailStep<'a> {
+    fn new(coords: Point) -> Self {
+        TrailStep {
+            coords,
+            prev: None,
+        }
+    }
+
+    fn with_parent(coords: Point, prev: &'a TrailStep) -> Self {
+        TrailStep {
+            coords,
+            prev: Some(prev)
+        }
+    }
+}
+
+struct ScoreBoard {
+    scores: HashMap<Point, usize>,
+}
+
+impl ScoreBoard {
+    fn new() -> Self {
+        ScoreBoard {
+            scores: HashMap::new()
+        }
+    }
+
+    fn get_score(&self, coords: &Point) -> Option<&usize> {
+        self.scores.get(coords)
+    }
+
+    fn add(&mut self, coords: Point) {
+        assert!(self.scores.insert(coords, 0).is_none())
+    }
+
+    fn update_scores(&mut self, increment: usize, trail_step: Option<&TrailStep>) {
+        let mut current = trail_step;
+
+        while let Some(step) = current {
+            *self.scores.get_mut(&step.coords).unwrap() += increment;
+            current = step.prev;
+        }
+    }
+}
 
 struct Map {
     rows: Vec<Vec<u8>>,
@@ -43,18 +103,31 @@ impl Map {
         }
     }
 
+    fn is_valid_step(&self, from_coord: &Point, to_coord: &Point) -> bool {
+        todo!()
+    }
+
     fn find_trailheads(&self) {
 
-        let mut scores: HashMap<Point, usize> = HashMap::new();
+        let mut scores = ScoreBoard::new();
 
         for start in self.bottoms.iter() {
-            let mut trail: Vec<ScoredPoint> = vec![];
-            let wavefront: Vec<Point> = vec![start.clone()];
+            let mut trail: Vec<TrailStep> = vec![];
+            let mut wavefront = vec![TrailStep::new(start.clone())];
 
-            while !wavefront.empty() {
+            while !wavefront.is_empty() {
                 let current = wavefront.pop().unwrap();
 
-                if scores.contains(
+                if let Some(&score) = scores.get_score(&current.coords) {
+                    if score > 0 {
+                        scores.update_scores(score, current.prev)
+                    }
+                } else {
+                    for c in current.coords.adjacent().into_iter()
+                        .filter(|next_coords| self.is_valid_step(&current.coords, next_coords))
+                    {
+                    }
+                }
             }
         }
     }
