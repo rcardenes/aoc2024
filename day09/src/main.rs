@@ -1,18 +1,24 @@
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::fmt::Display;
 
+enum Fragmentation {
+    Allow,
+    DontAllow,
+}
+
 #[derive(Clone, Debug)]
 struct File {
     id: usize, blocks: usize
 }
 
 impl File {
-    fn inc(&mut self) {
-        self.blocks += 1
-    }
+    fn split(&mut self, blocks: usize) -> File {
+        self.blocks -= blocks;
 
-    fn dec(&mut self) {
-        self.blocks -= 1
+        File {
+            id: self.id,
+            blocks,
+        }
     }
 
     fn checksum(&self, first_block: usize) -> usize {
@@ -39,8 +45,9 @@ impl Span {
         self.content.last()
     }
 
-    fn last_mut(&mut self) -> Option<&mut File> {
-        self.content.last_mut()
+    fn split_last(&mut self, blocks: usize) -> File {
+        self.freespace += blocks;
+        self.content.last_mut().unwrap().split(blocks)
     }
 
     fn append(&mut self, file: File) {
@@ -49,32 +56,12 @@ impl Span {
         self.content.push(file);
     }
 
-    // Returns true if the span becomes full
-    fn inc(&mut self, id: usize) -> bool {
-        assert!(!self.is_full());
-
-        match self.content.last_mut() {
-            Some(last_file) if last_file.id == id => {
-                self.freespace -= 1;
-                last_file.inc()
-            },
-            _ => self.append(File { id, blocks: 1 })
-        }
-
-        self.is_full()
+    fn pop(&mut self) -> Option<File> {
+        self.content.pop().and_then(|f| { self.freespace += f.blocks; Some(f) })
     }
 
-    // Returns true if the span becomes empty
-    fn dec(&mut self) -> bool {
-        assert!(!self.is_empty());
-
-        self.freespace += 1;
-        self.last_mut().unwrap().dec();
-        if self.last().unwrap().blocks == 0 {
-            self.content.pop();
-        }
-
-        self.is_empty()
+    fn will_fit(&self, blocks: usize) -> bool {
+        self.freespace >= blocks
     }
 
     fn is_empty(&self) -> bool {
@@ -112,7 +99,7 @@ impl Display for Span {
             std::iter::repeat('.').take(self.freespace).collect::<String>()
         };
 
-        write!(f, "{files}{empty}")
+        write!(f, "{files}{empty}|")
     }
 }
 
@@ -135,46 +122,54 @@ impl FileSystem {
         }
     }
 
-    fn compact(&self) -> FileSystem {
+    fn compact(&self, frag: Fragmentation) -> FileSystem {
         let mut structure = self.structure.clone();
 
         // By definition the first empty spot will be at the second span
         let mut freespace_pointer = 1usize;
         let mut data_pointer = self.data_pointer;
+        let mut last_data_block = None;
 
         while freespace_pointer < data_pointer {
-            let (inc_free_span, dec_data_span) = {
-                let (before_last_span, from_last_span) = structure.split_at_mut(data_pointer);
-                let data_span = &mut from_last_span[0];
-                let free_span = &mut before_last_span[freespace_pointer];
-                let file = data_span.last_mut().unwrap();
-                (free_span.inc(file.id), data_span.dec())
-            };
+            let (before_last_span, from_last_span) = structure.split_at_mut(data_pointer);
+            let data_span = &mut from_last_span[0];
+            let blocks_to_move = data_span.last().unwrap().blocks;
 
-            if inc_free_span {
-                // The span just became full
-                loop {
-                    freespace_pointer += 1;
-                    if !structure[freespace_pointer].is_full() {
-                        break;
+            match frag {
+                Fragmentation::Allow => {
+                    let free_span = &mut before_last_span[freespace_pointer];
+
+                    if !free_span.will_fit(blocks_to_move) {
+                        free_span.append(data_span.split_last(free_span.freespace));
+                    } else {
+                        free_span.append(data_span.pop().unwrap());
                     }
+                }
+                Fragmentation::DontAllow => {
+                    for free_span in &mut before_last_span[freespace_pointer..] {
+                        if free_span.will_fit(blocks_to_move) {
+                            free_span.append(data_span.pop().unwrap());
+                            break;
+                        } else if last_data_block.is_none() {
+                            last_data_block = Some(data_pointer);
+                        }
+                    }
+                    data_pointer -= 1;
                 }
             }
 
-            if dec_data_span {
-                // If the last span with data just became empty
-                loop {
-                    data_pointer -= 1;
-                    if !structure[data_pointer].is_empty() {
-                        break;
-                    }
-                }
+            while freespace_pointer < data_pointer && structure[freespace_pointer].is_full() {
+                freespace_pointer += 1;
+            }
+
+            while freespace_pointer < data_pointer && structure[data_pointer].is_empty() {
+                data_pointer -=1;
             }
         }
 
         FileSystem {
             structure,
-            data_pointer,
+            data_pointer: last_data_block.unwrap_or(data_pointer),
         }
     }
 
@@ -182,7 +177,6 @@ impl FileSystem {
         let mut curr_block = 0usize;
         let mut ret = 0usize;
 
-        // TODO: Rewrite as a fold with take_while
         for (i, span) in self.structure.iter().enumerate() {
             if i > self.data_pointer {
                 break;
@@ -264,7 +258,8 @@ fn read_input<R>(mut stream: BufReader<R>) -> FileSystem
 
 fn main() {
     let filesys = read_input(BufReader::new(stdin()));
-    let compact_fs = filesys.compact();
-    // eprintln!("{compact_fs}");
-    println!("Checksum for compacted: {}", compact_fs.checksum());
+    let compact_fs = filesys.compact(Fragmentation::Allow);
+    println!("Checksum for compacted:  {}", compact_fs.checksum());
+    let compact_fs = filesys.compact(Fragmentation::DontAllow);
+    println!("Checksum for defragment: {}", compact_fs.checksum());
 }
