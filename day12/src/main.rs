@@ -1,9 +1,36 @@
 use std::{collections::{HashMap, HashSet}, io::{stdin, BufRead, BufReader, Read}};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+impl Direction {
+    const VALUES: [Self; 4] = [Self::Up, Self::Down, Self::Left, Self::Right];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Point {
     x: i32,
     y: i32,
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match other.y.cmp(&self.y) {
+            std::cmp::Ordering::Equal => other.x.cmp(&self.x),
+            cmp_res => cmp_res,
+        }
+    }
 }
 
 impl Point {
@@ -12,12 +39,16 @@ impl Point {
     }
 
     fn neighbors(&self) -> Vec<Point> {
-        vec![
-            Point { x: self.x + 1, y: self.y },
-            Point { x: self.x - 1, y: self.y },
-            Point { x: self.x, y: self.y + 1 },
-            Point { x: self.x, y: self.y - 1 },
-        ]
+        Vec::from(Direction::VALUES.map(|facing| self.neighbor(facing)))
+    }
+
+    fn neighbor(&self, facing: Direction) -> Point {
+        match facing {
+            Direction::Up => Point { x: self.x, y: self.y - 1 },
+            Direction::Down => Point { x: self.x, y: self.y + 1 },
+            Direction::Left => Point { x: self.x - 1, y: self.y },
+            Direction::Right => Point { x: self.x + 1, y: self.y },
+        }
     }
 
     fn neighbor_set(&self) -> HashSet<Point> {
@@ -25,8 +56,53 @@ impl Point {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct Side {
+    start: Point,
+    end: Point,
+}
+
+impl Side {
+    fn adjacent(&self, side: &Direction, other: &Point) -> bool {
+        match side {
+            Direction::Up | Direction::Down => { self.end.y == other.y && (self.end.x - other.x).abs() == 1 },
+            Direction::Left | Direction::Right => { self.end.x == other.x && (self.end.y - other.y).abs() == 1 },
+        }
+    }
+
+    fn absorb(&mut self, other: Point) {
+        if self.end.x < other.x || self.end.y < other.y {
+            self.end = other;
+        } else {
+            self.start = other;
+        }
+    }
+}
+
+impl From<Point> for Side {
+    fn from(value: Point) -> Self {
+        Side {
+            start: value.clone(),
+            end: value,
+        }
+    }
+}
+
+impl PartialOrd for Side {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Side {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.start.cmp(&other.start)
+    }
+}
+
 #[derive(Debug)]
 struct Region {
+    #[allow(dead_code)]
     plant: char,
     plots: Vec<Point>,
 }
@@ -45,8 +121,45 @@ impl Region {
             .sum::<usize>()
     }
 
-    fn fencing_cost(&self) -> usize {
-        self.area() * self.perimeter()
+    fn sides(&self) -> usize {
+        let plot_set: HashSet<Point> = HashSet::from_iter(self.plots.iter().cloned());
+
+        let mut plots_by_facing: HashMap<Direction, Vec<Point>> = HashMap::new();
+
+        for plot in plot_set.iter() {
+            Direction::VALUES.iter()
+                .filter(|&facing| !plot_set.contains(&plot.neighbor(facing.clone())))
+                .for_each(|facing| {
+                    plots_by_facing
+                        .entry(facing.clone())
+                        .and_modify(|v| v.push(plot.clone()))
+                        .or_insert(vec![plot.clone()]);
+                });
+        }
+
+        let mut num_sides = 0usize;
+
+        for (dir, mut plots) in plots_by_facing.into_iter() {
+            plots.sort();
+            let mut fused = vec![Side::from(plots.pop().unwrap())];
+
+            while let Some(plot) = plots.pop() {
+                if let Some(matching) = fused.iter_mut().skip_while(|s| !s.adjacent(&dir, &plot)).next() {
+                    matching.absorb(plot);
+                } else {
+                    fused.push(Side::from(plot))
+                }
+            }
+
+            num_sides += fused.len();
+        }
+
+
+        num_sides
+    }
+
+    fn fencing_cost(&self, discounted: bool) -> usize {
+        self.area() * if discounted { self.sides() } else { self.perimeter() }
     }
 }
 
@@ -127,5 +240,6 @@ fn main() {
     let map = read_input(BufReader::new(stdin()));
     let regions = map.generate_regions();
     
-    println!("Fencing costs: {}", regions.iter().map(Region::fencing_cost).sum::<usize>());
+    println!("Fencing costs:            {}", regions.iter().map(|r| r.fencing_cost(false)).sum::<usize>());
+    println!("Discounted fencing costs: {}", regions.iter().map(|r| r.fencing_cost(true)).sum::<usize>());
 }
