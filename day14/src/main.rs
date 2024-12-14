@@ -22,11 +22,12 @@ impl Point {
     fn quadrant(&self) -> Option<u32> {
         match (self.x, self.y) {
             (MID_WIDE, _) | (_, MID_TALL) => None,
-            (x, y) if x < MID_WIDE && y < MID_TALL => { Some(0) },
-            (x, y) if x < MID_WIDE && y > MID_TALL => { Some(1) },
-            (x, y) if x > MID_WIDE && y < MID_TALL => { Some(2) },
-            (x, y) if x > MID_WIDE && y > MID_TALL => { Some(3) },
-            _ => panic!("This shouldn't happen...")
+            (x, y) => {
+                if x < MID_WIDE && y < MID_TALL { Some(0) }
+                else if x < MID_WIDE && y > MID_TALL { Some(1) }
+                else if x > MID_WIDE && y < MID_TALL { Some(2) }
+                else { Some(3) }
+            }
         }
     }
 }
