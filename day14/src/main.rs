@@ -1,4 +1,4 @@
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::{collections::HashMap, io::{stdin, BufRead, BufReader, Read}};
 
 const TILES_WIDE: i32 = 101;
 const MID_WIDE: i32 = TILES_WIDE / 2;
@@ -12,7 +12,7 @@ fn coords_from_text(raw: &str) -> (i32, i32) {
     (x.parse::<i32>().unwrap(), y.parse::<i32>().unwrap())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Point {
     x: i32,
     y: i32,
@@ -67,6 +67,30 @@ impl From<&str> for Robot {
     }
 }
 
+fn might_be_tree(robots: &Vec<Robot>) -> bool {
+    let mut at_line: HashMap<i32, Vec<i32>> = HashMap::new();
+
+    for r in robots.iter() {
+        at_line.entry(r.pos.y)
+            .and_modify(|v| v.push(r.pos.x))
+            .or_insert(vec![1]);
+    }
+
+    for value in at_line.into_values() {
+        if value.len() > 20 {
+            let mut value = value;
+            value.sort();
+            let (consec, _) = value[1..]
+                .iter()
+                .fold((0, value[0]),
+                    |(acc, prev_x), x| if (x - prev_x) == 1 { (acc + 1, *x) } else { (acc, *x) } );
+            return consec > 15
+        }
+    }
+
+    false
+}
+
 fn read_problem<R>(stream: BufReader<R>) -> Vec<Robot>
 where
     R: Read,
@@ -86,5 +110,14 @@ fn main() {
         .for_each(|q| in_quadrant[q as usize] += 1);
 
     let safety_factor = in_quadrant.into_iter().fold(1usize, |acc, n| acc * n);
-    eprintln!("Safety factor after 100 seconds: {safety_factor}");
+    println!("Safety factor after 100 seconds: {safety_factor}");
+
+    let mut robots = robots;
+    for t in 0..10000 {
+        if might_be_tree(&robots) {
+            println!("Found tree after {t} seconds");
+            break;
+        }
+        robots = robots.into_iter().map(|r| r.move_by(1)).collect();
+    }
 }
