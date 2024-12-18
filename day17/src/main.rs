@@ -77,11 +77,10 @@ impl CPU {
         }
     }
 
-    fn run_program(&mut self, shortcircuit: bool) -> Vec<u8> {
+    fn run_program(&mut self) -> Vec<u8> {
         let mem_limit: usize = self.program.len() - 1;
         let mut output = vec![];
         let mut ip = 0usize;
-        let mut program_copy = self.program.clone().into_iter();
 
         self.print_trace("START", 0);
         loop {
@@ -123,16 +122,6 @@ impl CPU {
                 }
                 Opcode::Out => {
                     let out = (self.get_combo(operand) % 8) as u8;
-                    if shortcircuit {
-                        if let Some(value) = program_copy.next() {
-                            if out != value {
-//                                eprintln!("{output:?}");
-                                return vec![]
-                            }
-                        } else {
-                            return output
-                        }
-                    }
                     output.push(out);
                     self.print_trace(format!("out {out}({operand})").as_str(), ip);
                 }
@@ -202,7 +191,7 @@ fn main() {
 
     cpu.set_trace(false);
 
-    let output = cpu.run_program(false)
+    let output = cpu.run_program()
         .into_iter()
         .map(|n| char::from(n + 48).to_string())
         .collect::<Vec<_>>()
@@ -217,7 +206,7 @@ fn main() {
         for i in 0..8 {
             let value = prefix | i;
             cpu.initialize_regs(vec![value, 0, 0]);
-            let new_output = cpu.run_program(false)
+            let new_output = cpu.run_program()
                 .into_iter()
                 .map(|n| char::from(n + 48).to_string())
                 .collect::<Vec<_>>()
