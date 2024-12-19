@@ -1,0 +1,4 @@
+   Compiling day18 v0.1.0 (/home/javi/src/adventOfCode/2024/day18)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `target/debug/day18 --test`
+22
