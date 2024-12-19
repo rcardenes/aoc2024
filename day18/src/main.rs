@@ -63,6 +63,7 @@ impl Ord for Point {
     }
 }
 
+#[derive(Clone)]
 struct Map {
     width: i32,
     height: i32,
@@ -84,7 +85,7 @@ impl Map {
         }
     }
 
-    fn find_exit(&self) -> usize {
+    fn find_exit(&self) -> Option<usize> {
         let origin = Point { x: 0, y: 0 };
         let target = Point { x: self.width - 1, y: self.height - 1 };
 
@@ -106,7 +107,7 @@ impl Map {
 
             for neighbor in all_neighbors.into_iter() {
                 if neighbor == target {
-                    return current_steps + 1
+                    return Some(current_steps + 1)
                 }
 
                 let next_step = current_steps + 1;
@@ -133,7 +134,7 @@ impl Map {
             }
         }
 
-        panic!("Couldn't find the exit!");
+        None
     }
 
     #[allow(dead_code)]
@@ -159,6 +160,31 @@ impl Map {
 
         println!("\n X at {steps} steps");
     }
+}
+
+fn dicotomic_search(initial_map: Map, bytes: Vec<Point>, good: usize, bad: usize) -> Point {
+    let mut good = good;
+    let mut bad = bad;
+
+    while good < bad {
+        let next_attempt = (good + bad) / 2;
+        if good == next_attempt {
+            break;
+        }
+
+        let mut test_map = initial_map.clone();
+        test_map.corrupt(&bytes[..next_attempt]);
+
+        if test_map.find_exit().is_none() {
+            bad = next_attempt;
+        } else {
+            good = next_attempt;
+        }
+    }
+
+    let mut bytes = bytes;
+
+    bytes.remove(bad - 1)
 }
 
 fn read_bytes<R>(stream: BufReader<R>) -> Vec<Point>
@@ -188,5 +214,23 @@ fn main() {
         map.corrupt(&bytes[..1024]);
     }
 
-    eprintln!("The exit can be reached in {} steps", map.find_exit());
+    println!("The exit can be reached in {} steps", map.find_exit().unwrap());
+
+    let mut good = 1023;
+
+    loop {
+        let next_attempt = (good * 2).max(bytes.len());
+        let mut next_map = Map::new(limits.0 + 1, limits.1 + 1);
+        next_map.corrupt(&bytes[..next_attempt]);
+
+        if next_map.find_exit().is_none() {
+            let new_map = Map::new(limits.0 + 1, limits.1 + 1);
+            let needle = dicotomic_search(new_map, bytes, good, next_attempt);
+
+            println!("It seems like the byte that takes the cake is coords: {},{}", needle.x, needle.y);
+            break;
+        } else {
+            good = next_attempt;
+        }
+    }
 }
